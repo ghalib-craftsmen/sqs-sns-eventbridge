@@ -1,0 +1,83 @@
+{
+  "Comment": "Iterate a batch of SQS records. Good → DynamoDB; Bad → SNS.",
+  "StartAt": "ProcessBatch",
+  "States": {
+    "ProcessBatch": {
+      "Type": "Map",
+      "MaxConcurrency": 5,
+      "ItemProcessor": {
+        "ProcessorConfig": { "Mode": "INLINE" },
+        "StartAt": "ParseBody",
+        "States": {
+          "ParseBody": {
+            "Type": "Pass",
+            "Parameters": {
+              "messageId.$": "$.messageId",
+              "rawBody.$": "$.body",
+              "parsed.$": "States.StringToJson($.body)"
+            },
+            "Next": "Validate"
+          },
+          "Validate": {
+            "Type": "Choice",
+            "Choices": [
+              {
+                "And": [
+                  { "Variable": "$.parsed.id",   "IsPresent": true },
+                  { "Variable": "$.parsed.id",   "IsString":  true },
+                  { "Variable": "$.parsed.name", "IsPresent": true },
+                  { "Variable": "$.parsed.name", "IsString":  true }
+                ],
+                "Next": "PutGoodToDynamoDB"
+              }
+            ],
+            "Default": "PublishBadToSNS"
+          },
+          "PutGoodToDynamoDB": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:dynamodb:putItem",
+            "Parameters": {
+              "TableName": "${table_name}",
+              "Item": {
+                "id":         { "S.$": "$.parsed.id" },
+                "name":       { "S.$": "$.parsed.name" },
+                "raw":        { "S.$": "$.rawBody" },
+                "receivedAt": { "S.$": "$$.State.EnteredTime" }
+              }
+            },
+            "ResultPath": null,
+            "End": true,
+            "Retry": [
+              {
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 1,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ]
+          },
+          "PublishBadToSNS": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::aws-sdk:sns:publish",
+            "Parameters": {
+              "TopicArn": "${topic_arn}",
+              "Subject": "Bad SQS message detected",
+              "Message.$": "States.Format('Message {} failed schema validation.\n\nRaw body:\n{}', $.messageId, $.rawBody)"
+            },
+            "ResultPath": null,
+            "End": true,
+            "Retry": [
+              {
+                "ErrorEquals": ["States.TaskFailed"],
+                "IntervalSeconds": 1,
+                "MaxAttempts": 2,
+                "BackoffRate": 2
+              }
+            ]
+          }
+        }
+      },
+      "End": true
+    }
+  }
+}
