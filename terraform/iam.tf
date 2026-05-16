@@ -92,3 +92,32 @@ resource "aws_iam_role_policy" "pipe" {
   role   = aws_iam_role.pipe.id
   policy = data.aws_iam_policy_document.pipe_policy.json
 }
+
+# ---------- API Gateway → SQS role ----------
+data "aws_iam_policy_document" "apigw_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["apigateway.amazonaws.com"]
+    }
+  }
+}
+
+resource "aws_iam_role" "apigw" {
+  name               = "${var.project_name}-apigw-role"
+  assume_role_policy = data.aws_iam_policy_document.apigw_assume.json
+}
+
+data "aws_iam_policy_document" "apigw_policy" {
+  statement {
+    sid       = "SendToSQS"
+    actions   = ["sqs:SendMessage"]
+    resources = [aws_sqs_queue.primary.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "apigw" {
+  role   = aws_iam_role.apigw.id
+  policy = data.aws_iam_policy_document.apigw_policy.json
+}

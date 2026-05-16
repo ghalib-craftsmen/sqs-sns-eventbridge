@@ -23,3 +23,22 @@ output "cost_filter_tag" {
   value       = "Project=${var.project_name}"
   description = "Filter by this tag in AWS Cost Explorer to see total spend"
 }
+
+output "cloudfront_url" {
+  value       = aws_cloudfront_distribution.main.domain_name
+  description = "Open in a browser — React app is served from here"
+}
+
+output "s3_bucket_name" {
+  value       = aws_s3_bucket.frontend.id
+  description = "Upload the built React app here via scripts/deploy-frontend.sh"
+}
+
+output "cloudfront_distribution_id" {
+  value = aws_cloudfront_distribution.main.id
+}
+
+output "api_gateway_id" {
+  value       = aws_api_gateway_rest_api.main.id
+  description = "REST API that receives POST /api/messages from CloudFront"
+}
